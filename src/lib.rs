@@ -57,6 +57,7 @@ pub mod skin_previews;
 pub mod soloist;
 pub mod sonos;
 mod storage;
+pub mod stretch;
 pub mod system_fonts;
 pub mod terminate;
 pub mod theme;
