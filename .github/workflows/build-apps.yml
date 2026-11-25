@@ -286,25 +286,41 @@ jobs:
           path: dist/*.dmg
           if-no-files-found: error
 
-  # The two Linux archives, as the one artifact the packaging workflow reads.
+  # Everything native-packages.yaml lists under assets, as the one artifact
+  # the packaging workflow reads: the two Linux archives, the source archive
+  # and the macOS DMG. Its build takes the checksum of each for the Arch and
+  # Homebrew recipes it writes beside the packages, so all four must be there.
   linux-inputs:
     name: Linux package inputs
-    needs: build
+    needs: [version, build, macos]
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v7
         with:
           pattern: '*-unknown-linux-gnu'
           path: downloaded
           merge-multiple: true
+      - uses: actions/download-artifact@v7
+        with:
+          name: macos-universal
+          path: downloaded
       - run: |
           mkdir dist
-          cp downloaded/*-unknown-linux-gnu.tar.gz dist/
+          cp downloaded/*-unknown-linux-gnu.tar.gz downloaded/*.dmg dist/
+          git archive --format=tar.gz --prefix="spotifast-${TAG}/" \
+            -o "dist/spotifast-${TAG}-source.tar.gz" HEAD
           ls -l dist
       - uses: actions/upload-artifact@v7
         with:
           name: linux-inputs
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.dmg
           if-no-files-found: error
 
   # .deb and .rpm for both architectures, through the same reusable workflow
@@ -371,9 +387,6 @@ jobs:
     env:
       TAG: ${{ needs.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
       - uses: actions/download-artifact@v7
         with:
           path: downloaded
@@ -385,8 +398,8 @@ jobs:
             -o -name '*.msi' -o -name '*.AppImage' -o -name '*.AppImage.zsync' -o -name '*.dmg' \
             -o -name '*.flatpak' -o -name '*.deb' -o -name '*.rpm' \) \
             -exec cp --update=none {} release/ \;
-          git archive --format=tar.gz --prefix="spotifast-${TAG}/" \
-            -o "release/spotifast-${TAG}-source.tar.gz" HEAD
+          # The source archive came with the Linux package inputs.
+          test -f "release/spotifast-${TAG}-source.tar.gz"
           cd release
           sha256sum -- * > checksums.txt
           ls -l
